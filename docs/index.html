@@ -1,0 +1,190 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MTD Dashboard Centered</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #eceaf3; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    #__bundler_loading { position: fixed; bottom: 20px; right: 20px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; color: #666; background: #fff; padding: 8px 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 10000; }
+    #__bundler_thumbnail { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #eceaf3; z-index: 9999; }
+    #__bundler_thumbnail svg { width: 100%; height: 100%; object-fit: contain; }
+    #__bundler_placeholder { color: #999; font-size: 14px; }
+  </style>
+  <noscript>
+    <style>#__bundler_loading { display: none; }</style>
+    <div style="position:fixed;bottom:12px;left:12px;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;color:#999;background:rgba(255,255,255,0.9);padding:6px 12px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.08);z-index:10000;">
+      This page requires JavaScript to display.
+    </div>
+  </noscript>
+</head>
+<body>
+  <div id="__bundler_thumbnail">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect x="120" y="160" width="440" height="480" rx="32" fill="#ffffff"></rect>
+    <rect x="640" y="160" width="440" height="480" rx="32" fill="#ffffff"></rect>
+    <rect x="160" y="210" width="56" height="56" rx="16" fill="#7c4dff"></rect>
+    <rect x="680" y="210" width="56" height="56" rx="16" fill="#14b1a0"></rect>
+    <rect x="160" y="320" width="120" height="120" rx="20" fill="#ede7fd"></rect>
+    <rect x="300" y="320" width="120" height="120" rx="20" fill="#ede7fd"></rect>
+    <rect x="440" y="320" width="80" height="120" rx="20" fill="#d6f4ef"></rect>
+    <rect x="680" y="320" width="120" height="120" rx="20" fill="#d6f4ef"></rect>
+    <rect x="820" y="320" width="120" height="120" rx="20" fill="#ede7fd"></rect>
+    <rect x="960" y="320" width="80" height="120" rx="20" fill="#ede7fd"></rect>
+    <rect x="160" y="480" width="380" height="120" rx="20" fill="#fbfbfe" stroke="#ecebf3" stroke-width="2"></rect>
+    <rect x="680" y="480" width="380" height="120" rx="20" fill="#fbfbfe" stroke="#ecebf3" stroke-width="2"></rect>
+  </svg>
+</div>
+  <div id="__bundler_loading">Unpacking...</div>
+
+  <script>
+    
+document.addEventListener('DOMContentLoaded', async function() {
+  const loading = document.getElementById('__bundler_loading');
+  function setStatus(msg) { if (loading) loading.textContent = msg; }
+
+  // Error sink persists across replaceWith since it's on window, not the DOM.
+  window.addEventListener('error', function(e) {
+    var p = document.body || document.documentElement;
+    var d = document.getElementById('__bundler_err') || p.appendChild(document.createElement('div'));
+    d.id = '__bundler_err';
+    d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
+    d.textContent = (d.textContent ? d.textContent + String.fromCharCode(10) : '') +
+      '[bundle] ' + (e.message || e.type) +
+      (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : '');
+  }, true);
+
+  try {
+    const manifestEl = document.querySelector('script[type="__bundler/manifest"]');
+    const templateEl = document.querySelector('script[type="__bundler/template"]');
+    if (!manifestEl || !templateEl) {
+      setStatus('Error: missing bundle data');
+      console.error('[bundler] Missing script tags — manifestEl:', !!manifestEl, 'templateEl:', !!templateEl);
+      return;
+    }
+
+    const manifest = JSON.parse(manifestEl.textContent);
+    let template = JSON.parse(templateEl.textContent);
+
+    const uuids = Object.keys(manifest);
+    setStatus('Unpacking ' + uuids.length + ' assets...');
+
+    const blobUrls = {};
+    await Promise.all(uuids.map(async (uuid) => {
+      const entry = manifest[uuid];
+      try {
+        const binaryStr = atob(entry.data);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+        let finalBytes = bytes;
+        if (entry.compressed) {
+          if (typeof DecompressionStream !== 'undefined') {
+            const ds = new DecompressionStream('gzip');
+            const writer = ds.writable.getWriter();
+            const reader = ds.readable.getReader();
+            writer.write(bytes);
+            writer.close();
+            const chunks = [];
+            let totalLen = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              totalLen += value.length;
+            }
+            finalBytes = new Uint8Array(totalLen);
+            let offset = 0;
+            for (const chunk of chunks) { finalBytes.set(chunk, offset); offset += chunk.length; }
+          } else {
+            console.warn('DecompressionStream not available, asset ' + uuid + ' may not render');
+          }
+        }
+
+        blobUrls[uuid] = URL.createObjectURL(new Blob([finalBytes], { type: entry.mime }));
+      } catch (err) {
+        console.error('Failed to decode asset ' + uuid + ':', err);
+        blobUrls[uuid] = URL.createObjectURL(new Blob([], { type: entry.mime }));
+      }
+    }));
+
+    const extResEl = document.querySelector('script[type="__bundler/ext_resources"]');
+    const extResources = extResEl ? JSON.parse(extResEl.textContent) : [];
+    const resourceMap = {};
+    for (const entry of extResources) {
+      if (blobUrls[entry.uuid]) resourceMap[entry.id] = blobUrls[entry.uuid];
+    }
+
+    setStatus('Rendering...');
+    for (const uuid of uuids) template = template.split(uuid).join(blobUrls[uuid]);
+
+    // Strip integrity + crossorigin — blob URLs from a file:// document inherit
+    // a null origin, so crossorigin forces a CORS fetch that SRI then rejects.
+    // The manifest bytes are ours; SRI protects against CDN compromise, not this.
+    template = template.replace(/\s+integrity="[^"]*"/gi, '').replace(/\s+crossorigin="[^"]*"/gi, '');
+
+    const resourceScript = '<script>window.__resources = ' +
+      JSON.stringify(resourceMap).split('</' + 'script>').join('<\\/' + 'script>') +
+      ';</' + 'script>';
+    // Inject after <head> so the DOCTYPE stays first; prepending the script
+    // would push the parser into quirks mode. DOMParser always emits a <head>
+    // (synthesizing one if the source HTML omitted it) but may carry
+    // attributes through, so match the full opening tag. slice() rather than
+    // replace() keeps us clear of $-pattern substitution in resourceScript.
+    const headOpen = template.match(/<head[^>]*>/i);
+    if (headOpen) {
+      const i = headOpen.index + headOpen[0].length;
+      template = template.slice(0, i) + resourceScript + template.slice(i);
+    }
+
+    // Parse the template and swap the root element. Scripts inserted via
+    // DOMParser/replaceWith are inert per spec — re-create each with
+    // createElement so they execute, awaiting onload for src scripts to
+    // preserve ordering (React before ReactDOM before Babel before text/babel).
+    const doc = new DOMParser().parseFromString(template, 'text/html');
+    document.documentElement.replaceWith(doc.documentElement);
+    const dead = Array.from(document.scripts);
+    for (const old of dead) {
+      const s = document.createElement('script');
+      for (const a of old.attributes) s.setAttribute(a.name, a.value);
+      s.textContent = old.textContent;
+      // text/babel scripts with a src: fetch and inline. transformScriptTags
+      // does XHR against the src, but blob:null/ from a file:// origin is
+      // silently dropped. Inlining makes it a plain inline babel script,
+      // which transformScriptTags handles unconditionally.
+      if ((s.type === 'text/babel' || s.type === 'text/jsx') && s.src) {
+        const r = await fetch(s.src);
+        s.textContent = await r.text();
+        s.removeAttribute('src');
+      }
+      const p = s.src ? new Promise(function(r) { s.onload = s.onerror = r; }) : null;
+      old.replaceWith(s);
+      if (p) await p;
+    }
+    // Babel standalone auto-transforms type=text/babel on DOMContentLoaded,
+    // which fired before we swapped the document. Trigger manually if present.
+    if (window.Babel && typeof window.Babel.transformScriptTags === 'function') {
+      window.Babel.transformScriptTags();
+    }
+  } catch (err) {
+    setStatus('Error unpacking: ' + err.message);
+    console.error('Bundle unpack error:', err);
+  }
+});
+
+  </script>
+
+  <script type="__bundler/manifest">
+{}
+  </script>
+
+  <script type="__bundler/ext_resources">
+[]
+  </script>
+
+  <script type="__bundler/template">
+"<!DOCTYPE html>\n<html lang=\"en\"><head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>MTD Dashboard Centered<\u002Ftitle>\n<style>\n*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }\nbody {\n  min-height: 100vh;\n  background: #eceaf3;\n  font-family: 'Inter', system-ui, sans-serif;\n}\n.page-shell {\n  min-height: 100vh;\n  width: 100%;\n  padding: 16px;\n}\n\n.dashboard-frame {\n  width: min(1680px, 100%);\n  margin: 0 auto;\n}\n\n.dash {\n  width: 100%;\n  max-width: none;\n  margin: 0 auto;\n  color: #1f1d2b;\n  background: #f3f2f8;\n  padding: 28px 20px;\n  border-radius: 24px;\n  box-shadow: 0 10px 30px rgba(60,40,120,.08);\n}\n\n.dash-title { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; color: #1f1d2b; margin-bottom: 20px; }\n.row-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }\n.row-bottom {}\n.widget {\n  background: #fff;\n  border: 1px solid #ecebf3;\n  border-radius: 18px;\n  padding: 20px 20px 16px;\n  box-shadow: 0 1px 2px rgba(40,30,80,.04), 0 10px 28px rgba(60,40,120,.05);\n  flex: none;\n}\n.w-head { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; }\n.w-ico { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; flex: none; background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: #fff; }\n.w-ico svg { width: 17px; height: 17px; }\n.w-titles { display: flex; flex-direction: column; gap: 1px; min-width: 0; }\n.w-title-line { display: flex; align-items: baseline; gap: 6px; }\n.w-title { font-size: 16.5px; font-weight: 800; letter-spacing: -0.3px; }\n.w-mtd { font-size: 13px; color: #8c87a0; font-weight: 600; }\n.w-sub { font-size: 13px; color: #8c87a0; font-weight: 500; }\n.spacer { flex: 1; }\n.w-link { font-size: 13px; font-weight: 700; color: #7c4dff; text-decoration: none; }\n.w-link:hover { text-decoration: underline; }\n.loc-pills { display: flex; gap: 8px; margin-bottom: 14px; }\n.pill { padding: 5px 16px; border-radius: 999px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; background: #faf9fe; color: #8c87a0; border: 1.5px solid #ecebf3; transition: all .14s; }\n.pill.active { color: #1f1d2b; border-color: #4a4560; font-weight: 800; }\n.pill.inactive { opacity: 0.4; }\n.pill:not(.active):hover { opacity: 0.72; }\n.loc-widget { width: 100%; min-height: 524px; display: flex; flex-direction: column; }\n.loc-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 10px; flex: 1 1 auto; }\n.metric { background: #fbfbfe; border: 1px solid #ecebf3; border-radius: 13px; padding: 12px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }\n.m-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; }\n.m-ico svg { width: 17px; height: 17px; }\n.m-ico.purple { background: #ede7fd; color: #7c4dff; }\n.m-ico.teal { background: #d6f4ef; color: #14b1a0; }\n.m-body { min-width: 0; width: 100%; }\n.m-lbl { font-size: 11px; color: #8c87a0; font-weight: 600; display: flex; align-items: center; gap: 4px; margin-bottom: 2px; white-space: nowrap; overflow: visible; }\n.m-val { font-size: 18px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.05; }\n.m-delta { font-size: 11px; font-weight: 700; color: #1aa45c; margin-top: 3px; white-space: nowrap; }\n.m-delta .vs { color: #8c87a0; font-weight: 600; }\n.w-foot { margin-top: 14px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 12.5px; color: #8c87a0; font-weight: 600; }\n.w-foot b { color: #1f1d2b; }\n.info { position: relative; display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; border: 1.3px solid #c3bdd2; color: #a8a2bb; font-size: 9px; font-weight: 800; cursor: help; }\n.info:hover .tip { opacity: 1; visibility: visible; }\n.tip { position: absolute; bottom: 150%; left: 50%; transform: translateX(-50%); width: 256px; background: #1f1d2b; color: #fff; font-size: 11px; line-height: 1.5; font-weight: 500; padding: 11px 13px; border-radius: 10px; text-align: left; text-transform: none; box-shadow: 0 10px 26px rgba(33,29,52,.32); opacity: 0; visibility: hidden; transition: all .18s; white-space: pre-line; pointer-events: none; z-index: 30; }\n.tip::after { content: \"\"; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #1f1d2b; }\n.prac-widget { width: 100%; min-height: 524px; display: flex; flex-direction: column; }\n.prac-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 10px; flex: 1 1 auto; }\n.prac { background: #fbfbfe; border: 1px solid #ecebf3; border-radius: 13px; padding: 12px; display: flex; flex-direction: column; gap: 9px; }\n.prac.empty { background: #fafafc; border-style: dashed; border-color: #e4e2ee; }\n.prac.empty .prac-name, .prac.empty .s-val { color: #b9b5c6; }\n.prac-av.empty-av { background: #f0eef6; color: #b9b5c6; }\n.prac-top { display: flex; flex-direction: row; align-items: center; gap: 9px; }\n.prac-av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; flex: none; letter-spacing: -0.3px; }\n.prac-av.purple { background: #ede7fd; color: #7c4dff; }\n.prac-av.teal { background: #d6f4ef; color: #14b1a0; }\n.prac-name { font-size: 11.5px; font-weight: 800; letter-spacing: -0.2px; line-height: 1.2; min-width: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }\n.prac-stats { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #ecebf3; padding-top: 8px; }\n.prac-stat { display: flex; flex-direction: column; gap: 1px; }\n.prac-stat .s-lbl { font-size: 9px; color: #8c87a0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }\n.prac-stat .s-val { font-size: 13px; font-weight: 800; letter-spacing: -0.3px; }\n.pager { margin-top: 14px; height: 28px; display: flex; align-items: center; justify-content: center; gap: 14px; }\n.pg-btn { width: 26px; height: 26px; border-radius: 8px; border: 1px solid #ecebf3; background: #fff; display: grid; place-items: center; cursor: pointer; color: #1f1d2b; transition: all .14s; }\n.pg-btn:hover:not(:disabled) { border-color: #7c4dff; color: #7c4dff; }\n.pg-btn:disabled { opacity: .35; cursor: not-allowed; }\n.pg-btn svg { width: 14px; height: 14px; }\n.pg-info { font-size: 12.5px; font-weight: 700; color: #8c87a0; min-width: 78px; text-align: center; }\n.ranking-widget { width: 100%; }\n.chart { position: relative; }\n.gridlines { position: absolute; top: 0; bottom: 26px; left: 192px; right: 0; z-index: 0; }\n.gridlines i { position: absolute; top: 0; bottom: 0; width: 1px; background: #ecebf3; }\n.rows { position: relative; z-index: 1; display: grid; grid-template-columns: 178px 1fr; column-gap: 14px; row-gap: 12px; }\n.r-label { display: flex; align-items: center; gap: 9px; min-width: 0; }\n.r-rank { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: #fff; background: linear-gradient(135deg, #8b5cf6, #6d28d9); }\n.r-name { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }\n.r-name .r-loc { font-size: 10px; font-weight: 600; color: #a8a2bb; letter-spacing: 0.01em; overflow: hidden; text-overflow: ellipsis; }\n.r-track { display: flex; align-items: center; min-width: 0; }\n.bar { height: 15px; border-radius: 999px; background: linear-gradient(90deg, #6d28d9, #a98bf0); flex: none; min-width: 4px; }\n.bar-val { font-size: 12.5px; font-weight: 800; letter-spacing: -0.3px; margin-left: 9px; white-space: nowrap; }\n.axis { position: relative; z-index: 1; margin-top: 10px; margin-left: 192px; height: 16px; }\n.axis span { position: absolute; font-size: 11px; font-weight: 600; color: #8c87a0; white-space: nowrap; }\n@media (max-width: 1100px) {\n  .row-top { grid-template-columns: 1fr; }\n}\n\n@media (max-width: 768px) {\n  .page-shell { padding: 12px; }\n  .dash { padding: 18px 14px; border-radius: 18px; }\n  .loc-grid, .prac-grid { grid-template-columns: repeat(2, 1fr); }\n  .rows { grid-template-columns: 1fr; row-gap: 8px; }\n  .gridlines, .axis { display: none; }\n}\n<\u002Fstyle>\n<\u002Fhead>\n<body>\n\n<div class=\"page-shell\">\n  <div class=\"dashboard-frame\">\n    <div class=\"dash\">\n    <div class=\"dash-title\">Performance Dashboard<\u002Fdiv>\n    <div class=\"row-top\">\n      <section class=\"widget loc-widget\">\n        <div class=\"w-head\">\n          <span class=\"w-ico\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0\"><\u002Fpath><circle cx=\"12\" cy=\"10\" r=\"3\"><\u002Fcircle><\u002Fsvg>\n          <\u002Fspan>\n          <div class=\"w-titles\">\n            <div class=\"w-title-line\"><span class=\"w-title\">Locations<\u002Fspan><span class=\"w-mtd\">(May 1, 2026 - May 31, 2026)<\u002Fspan><\u002Fdiv>\n            <div class=\"w-sub\">Performance analytics by location<\u002Fdiv>\n          <\u002Fdiv>\n        <\u002Fdiv>\n        <div class=\"loc-pills\" id=\"loc-pills\">\n          <button class=\"pill active\" onclick=\"setMetricLoc('jefferson', this)\">Jefferson City<\u002Fbutton>\n          <button class=\"pill inactive\" onclick=\"setMetricLoc('lake', this)\">Lake Ozark<\u002Fbutton>\n        <\u002Fdiv>\n        <div class=\"loc-grid\" id=\"loc-grid\"><\u002Fdiv>\n        <div class=\"w-foot\">Total appointments&nbsp;<b>[<span id=\"loc-total\"><\u002Fspan>]<\u002Fb><\u002Fdiv>\n      <\u002Fsection>\n\n      <section class=\"widget prac-widget\">\n        <div class=\"w-head\">\n          <span class=\"w-ico\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"><\u002Fpath><circle cx=\"9\" cy=\"5\" r=\"4\"><\u002Fcircle><path d=\"M23 21v-2a4 4 0 0 0-3-3.87\"><\u002Fpath><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"><\u002Fpath><\u002Fsvg>\n          <\u002Fspan>\n          <div class=\"w-titles\">\n            <div class=\"w-title-line\"><span class=\"w-title\">Practitioners<\u002Fspan><span class=\"w-mtd\">(May 1, 2026 - May 31, 2026)<\u002Fspan><\u002Fdiv>\n            <div class=\"w-sub\">Performance analytics by practitioner<\u002Fdiv>\n          <\u002Fdiv>\n          <span class=\"spacer\"><\u002Fspan>\n          <a class=\"w-link\" href=\"#\" onclick=\"return false\">View all<\u002Fa>\n        <\u002Fdiv>\n        <div class=\"loc-pills\" id=\"prac-pills\">\n          <button class=\"pill active\" id=\"pill-jefferson\" onclick=\"setPracLoc('jefferson', this)\">Jefferson City<\u002Fbutton>\n          <button class=\"pill inactive\" id=\"pill-lake\" onclick=\"setPracLoc('lake', this)\">Lake Ozark<\u002Fbutton>\n        <\u002Fdiv>\n        <div class=\"prac-grid\" id=\"prac-grid\"><\u002Fdiv>\n        <div class=\"pager\">\n          <button class=\"pg-btn\" id=\"pg-prev\" onclick=\"pracPage(-1)\" disabled=\"\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 18l-6-6 6-6\"><\u002Fpath><\u002Fsvg>\n          <\u002Fbutton>\n          <span class=\"pg-info\" id=\"pg-info\"><\u002Fspan>\n          <button class=\"pg-btn\" id=\"pg-next\" onclick=\"pracPage(1)\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18l6-6-6-6\"><\u002Fpath><\u002Fsvg>\n          <\u002Fbutton>\n        <\u002Fdiv>\n      <\u002Fsection>\n    <\u002Fdiv>\n\n    <div class=\"row-bottom\">\n      <section class=\"widget ranking-widget\">\n        <div class=\"w-head\">\n          <span class=\"w-ico\">\n            <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 20V10\"><\u002Fpath><path d=\"M18 20V4\"><\u002Fpath><path d=\"M6 20v-4\"><\u002Fpath><\u002Fsvg>\n          <\u002Fspan>\n          <div class=\"w-titles\">\n            <div class=\"w-title-line\"><span class=\"w-title\">Revenue Ranking<\u002Fspan><span class=\"w-mtd\">(May 1, 2026 - May 31, 2026)<\u002Fspan><\u002Fdiv>\n            <div class=\"w-sub\">Revenue by practitioner<\u002Fdiv>\n          <\u002Fdiv>\n        <\u002Fdiv>\n        <div class=\"chart\">\n          <div class=\"gridlines\" id=\"gridlines\"><\u002Fdiv>\n          <div class=\"rows\" id=\"rank-rows\"><\u002Fdiv>\n          <div class=\"axis\" id=\"rank-axis\"><\u002Fdiv>\n        <\u002Fdiv>\n      <\u002Fsection>\n    <\u002Fdiv>\n  <\u002Fdiv>\n<\u002Fdiv>\n\n<script>\nconst REBOOK_DEF = \"Rebook Rate = Rebooked Appointments / Total Appointments Completed\\n\\nTo be counted as a 'rebooked' appointment, a client's appointment must meet these conditions:\\n•  main appointment completed\\n•  another appointment booked within 12 hours of main appointment start time (online or by front desk)\";\n\nconst locationMetrics = {\n  jefferson: [\n    { icon: 'dollar',   tint: 'purple', label: 'Gross Revenue', value: '$145,671', total: false },\n    { icon: 'wallet',   tint: 'teal',   label: 'Net Sales', value: '$94,432', total: false },\n    { icon: 'calendar', tint: 'purple', label: 'Appointments', value: '295', total: true },\n    { icon: 'tag',      tint: 'purple', label: 'Avg Ticket', value: '$421', total: false },\n    { icon: 'refresh',  tint: 'teal',   label: 'Rebook Rate', value: '68.3%', total: false, info: REBOOK_DEF },\n    { icon: 'bag',      tint: 'teal',   label: 'Retail Sales', value: '$12,043', total: false }\n  ],\n  lake: [\n    { icon: 'dollar',   tint: 'purple', label: 'Gross Revenue', value: '$397,539', total: false },\n    { icon: 'wallet',   tint: 'teal',   label: 'Net Sales', value: '$255,247', total: false },\n    { icon: 'calendar', tint: 'purple', label: 'Appointments', value: '818', total: true },\n    { icon: 'tag',      tint: 'purple', label: 'Avg Ticket', value: '$437', total: false },\n    { icon: 'refresh',  tint: 'teal',   label: 'Rebook Rate', value: '68.3%', total: false, info: REBOOK_DEF },\n    { icon: 'bag',      tint: 'teal',   label: 'Retail Sales', value: '$32,876', total: false }\n  ]\n};\n\nconst UTIL_DEF = \"Utilization Rate = Booked Hours / Available Hours\\n\\nThe share of a practitioner's available working hours that were filled with booked appointments during the period.\";\n\nconst practitioners = {\n  jefferson: [\n    { name: 'Admin Mann', initials: 'AM', color: 'purple', revenue: '$63,594', appts: '210', util: '88%' },\n    { name: 'Ashley LePage', initials: 'AL', color: 'teal', revenue: '$44,012', appts: '97', util: '81%' },\n    { name: 'Front Desk Jefferson City', initials: 'FD', color: 'purple', revenue: '$29,634', appts: '97', util: '76%' },\n    { name: 'Lindsey Eveler', initials: 'LE', color: 'teal', revenue: '$20,869', appts: '67', util: '72%' },\n    { name: 'Carley Drinkard', initials: 'CD', color: 'purple', revenue: '$18,702', appts: '46', util: '69%' },\n    { name: 'Taylor Cook', initials: 'TC', color: 'teal', revenue: '$13,060', appts: '60', util: '64%' },\n    { name: 'Olivia Allen', initials: 'OA', color: 'purple', revenue: '$5,608', appts: '4', util: '41%' }\n  ],\n  lake: [\n    { name: 'Front Desk Lake Ozark', initials: 'FD', color: 'purple', revenue: '$133,427', appts: '219', util: '90%' },\n    { name: 'Debra Atkinson', initials: 'DA', color: 'teal', revenue: '$94,261', appts: '127', util: '85%' },\n    { name: 'Brittany Quain', initials: 'BQ', color: 'purple', revenue: '$33,088', appts: '85', util: '78%' },\n    { name: 'Catherine Bear', initials: 'CB', color: 'teal', revenue: '$19,881', appts: '45', util: '70%' },\n    { name: 'Isabella Whelchel', initials: 'IW', color: 'purple', revenue: '$17,157', appts: '78', util: '74%' },\n    { name: 'Taylor Luebbering', initials: 'TL', color: 'teal', revenue: '$11,680', appts: '65', util: '66%' },\n    { name: 'Makayla Georgopoulos', initials: 'MG', color: 'purple', revenue: '$6,278', appts: '56', util: '58%' },\n    { name: 'Zeinap Imbraimova', initials: 'ZI', color: 'teal', revenue: '$552', appts: '5', util: '22%' }\n  ]\n};\n\n// Location label shown on ranking rows to disambiguate practitioners across sites.\nconst locationLabels = { jefferson: 'Jefferson City', lake: 'Lake Ozark' };\n\n// Built live from the practitioner data so the ranking never drifts.\n// Test practitioners are excluded and only the top 10 real practitioners are shown.\nfunction buildRanking() {\n  const parseMoney = (s) => Number(String(s).replace(/[^0-9.]/g, ''));\n  const all = [];\n  Object.keys(practitioners).forEach(loc => {\n    practitioners[loc].forEach(p => {\n      if (/test practitioner/i.test(p.name)) return;\n      all.push({ name: p.name, loc: locationLabels[loc], revenue: parseMoney(p.revenue) });\n    });\n  });\n  return all.sort((a, b) => b.revenue - a.revenue).slice(0, 10);\n}\nconst rankingData = buildRanking();\n\nlet currentMetricLoc = 'jefferson';\nlet currentPracLoc = 'jefferson';\nlet currentPracPage = 0;\nconst perPage = 6;\n\nconst METRIC_ICONS = {\n  dollar: '<path d=\"M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"/>',\n  wallet: '<rect x=\"2.5\" y=\"6\" width=\"19\" height=\"13\" rx=\"3\"/><path d=\"M16 12h3.5M2.5 9.5h14\"/>',\n  calendar: '<rect x=\"3\" y=\"4.5\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M3 9h18M8 2.5v4M16 2.5v4\"/>',\n  tag: '<path d=\"M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z\"/><circle cx=\"7\" cy=\"7\" r=\"1.2\"/>',\n  refresh: '<polyline points=\"22 4 22 9.5 16.5 9.5\"/><polyline points=\"2 20 2 14.5 7.5 14.5\"/><path d=\"M4.2 9a8 8 0 0 1 13.3-3L22 9.5M2 14.5l4.5 3.5A8 8 0 0 0 19.8 15\"/>',\n  bag: '<path d=\"M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z\"/><line x1=\"3\" y1=\"6\" x2=\"21\" y2=\"6\"/><path d=\"M16 10a4 4 0 0 1-8 0\"/>'\n};\nfunction metricIcon(shape, tint) {\n  return `<span class=\"m-ico ${tint}\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">${METRIC_ICONS[shape]}<\u002Fsvg><\u002Fspan>`;\n}\n\nfunction renderMetrics(loc) {\n  const grid = document.getElementById('loc-grid');\n  const total = document.getElementById('loc-total');\n  grid.innerHTML = locationMetrics[loc].map(item => `\n    <div class=\"metric\">\n      ${metricIcon(item.icon, item.tint)}\n      <div class=\"m-body\">\n        <div class=\"m-lbl\">${item.label}${item.info ? `<span class=\"info\">?<span class=\"tip\">${item.info}<\u002Fspan><\u002Fspan>` : ''}<\u002Fdiv>\n        <div class=\"m-val\">${item.value}<\u002Fdiv>\n        ${item.delta ? `<div class=\"m-delta\">${item.delta} <span class=\"vs\">vs last month<\u002Fspan><\u002Fdiv>` : ''}\n      <\u002Fdiv>\n    <\u002Fdiv>\n  `).join('');\n  total.textContent = locationMetrics[loc].find(x => x.total).value;\n}\n\nfunction setMetricLoc(loc, el) {\n  currentMetricLoc = loc;\n  document.querySelectorAll('#loc-pills .pill').forEach(btn => btn.classList.remove('active'));\n  document.querySelectorAll('#loc-pills .pill').forEach(btn => btn.classList.add('inactive'));\n  el.classList.add('active');\n  el.classList.remove('inactive');\n  renderMetrics(loc);\n}\n\nfunction renderPractitioners() {\n  const list = practitioners[currentPracLoc];\n  const start = currentPracPage * perPage;\n  const items = list.slice(start, start + perPage);\n  const grid = document.getElementById('prac-grid');\n  grid.innerHTML = items.map(p => `\n    <div class=\"prac\">\n      <div class=\"prac-top\">\n        <div class=\"prac-av ${p.color}\">${p.initials}<\u002Fdiv>\n        <div class=\"prac-name\">${p.name}<\u002Fdiv>\n      <\u002Fdiv>\n      <div class=\"prac-stats\">\n        <div class=\"prac-stat\"><span class=\"s-lbl\">Revenue<\u002Fspan><span class=\"s-val\">${p.revenue}<\u002Fspan><\u002Fdiv>\n        <div class=\"prac-stat\"><span class=\"s-lbl\">Appointments<\u002Fspan><span class=\"s-val\">${p.appts}<\u002Fspan><\u002Fdiv>\n        <div class=\"prac-stat\"><span class=\"s-lbl\">Utilization Rate <span class=\"info\">?<span class=\"tip\">${UTIL_DEF}<\u002Fspan><\u002Fspan><\u002Fspan><span class=\"s-val\">${p.util}<\u002Fspan><\u002Fdiv>\n      <\u002Fdiv>\n    <\u002Fdiv>\n  `).join('');\n\n  while (items.length < perPage) {\n    grid.innerHTML += `\n      <div class=\"prac empty\">\n        <div class=\"prac-top\">\n          <div class=\"prac-av empty-av\">--<\u002Fdiv>\n          <div class=\"prac-name\">No practitioner<\u002Fdiv>\n        <\u002Fdiv>\n        <div class=\"prac-stats\">\n          <div class=\"prac-stat\"><span class=\"s-lbl\">Revenue<\u002Fspan><span class=\"s-val\">--<\u002Fspan><\u002Fdiv>\n          <div class=\"prac-stat\"><span class=\"s-lbl\">Appointments<\u002Fspan><span class=\"s-val\">--<\u002Fspan><\u002Fdiv>\n          <div class=\"prac-stat\"><span class=\"s-lbl\">Utilization Rate<\u002Fspan><span class=\"s-val\">--<\u002Fspan><\u002Fdiv>\n        <\u002Fdiv>\n      <\u002Fdiv>\n    `;\n    items.push({});\n  }\n\n  const totalPages = Math.ceil(list.length / perPage);\n  document.getElementById('pg-info').textContent = `${currentPracPage + 1} / ${totalPages}`;\n  document.getElementById('pg-prev').disabled = currentPracPage === 0;\n  document.getElementById('pg-next').disabled = currentPracPage >= totalPages - 1;\n}\n\nfunction setPracLoc(loc, el) {\n  currentPracLoc = loc;\n  currentPracPage = 0;\n  document.querySelectorAll('#prac-pills .pill').forEach(btn => btn.classList.remove('active'));\n  document.querySelectorAll('#prac-pills .pill').forEach(btn => btn.classList.add('inactive'));\n  el.classList.add('active');\n  el.classList.remove('inactive');\n  renderPractitioners();\n}\n\nfunction pracPage(direction) {\n  const totalPages = Math.ceil(practitioners[currentPracLoc].length / perPage);\n  currentPracPage = Math.max(0, Math.min(totalPages - 1, currentPracPage + direction));\n  renderPractitioners();\n}\n\nfunction renderRanking() {\n  const max = Math.max(...rankingData.map(r => r.revenue));\n  \n  // Round max up to nearest $10,000\n  const scaledMax = Math.ceil(max / 10000) * 10000;\n  // Keep the axis readable: wider steps once the scale gets large.\n  const increment = scaledMax > 60000 ? 20000 : 10000;\n  const numSteps = scaledMax / increment;\n  \n  const rows = document.getElementById('rank-rows');\n  const axis = document.getElementById('rank-axis');\n  const grid = document.getElementById('gridlines');\n\n  rows.innerHTML = rankingData.map((r, i) => `\n    <div class=\"r-label\">\n      <span class=\"r-rank\">${i + 1}<\u002Fspan>\n      <span class=\"r-name\">${r.name}${r.loc ? `<span class=\"r-loc\">${r.loc}<\u002Fspan>` : ''}<\u002Fspan>\n    <\u002Fdiv>\n    <div class=\"r-track\">\n      <div class=\"bar\" style=\"width:${(r.revenue / scaledMax) * 100}%\"><\u002Fdiv>\n      <span class=\"bar-val\">$${r.revenue.toLocaleString()}<\u002Fspan>\n    <\u002Fdiv>\n  `).join('');\n\n  axis.innerHTML = Array.from({ length: numSteps + 1 }, (_, i) => {\n    const val = increment * i;\n    const pct = (i / numSteps) * 100;\n    const tx = i === 0 ? '0' : (i === numSteps ? '-100%' : '-50%');\n    return `<span style=\"left:${pct}%; transform: translateX(${tx})\">$${val.toLocaleString()}<\u002Fspan>`;\n  }).join('');\n\n  grid.innerHTML = Array.from({ length: numSteps + 1 }, (_, i) => `<i style=\"left:${(i / numSteps) * 100}%\"><\u002Fi>`).join('');\n}\n\nrenderMetrics(currentMetricLoc);\nrenderPractitioners();\nrenderRanking();\n<\u002Fscript>\n\n<\u002Fdiv><\u002Fbody><\u002Fhtml>"
+  </script>
+</body>
+</html>
